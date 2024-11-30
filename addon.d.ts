@@ -1,5 +1,6 @@
 export function readDictionary(path_to_dictionary: string): Promise<Dictionary>;
 export function synthesis(text: string, options: OpenJTalkOptions): Promise<WaveObject>;
+export function text_to_accent_phrases(text: string, options: OpenJTalkOptions): Promise<NjdFeatures[]>;
 export { path_to_dictionary as dictionary_dir };
 export type Dictionary = {
     /**
@@ -94,5 +95,21 @@ export type WaveObject = {
      * monaural.
      */
     numChannels: 1;
+};
+export type NjdFeatures = {
+    string: string;
+    pos: string;
+    pos_group1: string;
+    pos_group2: string;
+    pos_group3: string;
+    ctype: string;
+    cform: string;
+    orig: string;
+    read: string;
+    pron: string;
+    acc: number;
+    mora_size: number;
+    chain_rule: string;
+    chain_flag: number;
 };
 declare const path_to_dictionary: string;

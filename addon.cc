@@ -30,7 +30,7 @@ struct Wave
   size_t sampling_frequency;
 };
 
-using DataType = variant<Wave, const char *>;
+using DataType = variant<Wave, std::vector<labels>, const char *>;
 void CallJs(Napi::Env env, Napi::Function callback, Context *context,
             DataType *data)
 {
@@ -42,10 +42,14 @@ void CallJs(Napi::Env env, Napi::Function callback, Context *context,
       {
         auto wave = get<Wave>(*data);
         auto buffer = Napi::Buffer<signed short>::New(
-            env, wave.value, wave.length, [](Napi::Env, signed short *pcm) {
-              free(pcm);
-            });
+            env, wave.value, wave.length, [](Napi::Env, signed short *pcm)
+            { free(pcm); });
         callback.Call(context->Value(), {env.Null(), buffer, Napi::Number::New(env, wave.sampling_frequency)});
+      }
+      else if (holds_alternative<std::vector<labels>>(*data))
+      {
+        auto features = get<std::vector<labels>>(*data);
+        callback.Call(context->Value(), {env.Null(), ConvertLabelsToJSArray(env, features)});
       }
       else
       {
@@ -59,6 +63,35 @@ void CallJs(Napi::Env env, Napi::Function callback, Context *context,
     // We're finished with the data.
     delete data;
   }
+}
+
+// std::vector<labels> を Napi::Array に変換する関数
+Napi::Array ConvertLabelsToJSArray(Napi::Env env, const std::vector<labels> &labelList)
+{
+  Napi::Array jsArray = Napi::Array::New(env, labelList.size());
+
+  for (size_t i = 0; i < labelList.size(); ++i)
+  {
+    Napi::Object obj = Napi::Object::New(env);
+    obj.Set("string", labelList[i].string);
+    obj.Set("pos", labelList[i].pos);
+    obj.Set("pos_group1", labelList[i].pos_group1);
+    obj.Set("pos_group2", labelList[i].pos_group2);
+    obj.Set("pos_group3", labelList[i].pos_group3);
+    obj.Set("ctype", labelList[i].ctype);
+    obj.Set("cform", labelList[i].cform);
+    obj.Set("orig", labelList[i].orig);
+    obj.Set("read", labelList[i].read);
+    obj.Set("pron", labelList[i].pron);
+    obj.Set("acc", Napi::Number::New(env, labelList[i].acc));
+    obj.Set("mora_size", Napi::Number::New(env, labelList[i].mora_size));
+    obj.Set("chain_rule", labelList[i].chain_rule);
+    obj.Set("chain_flag", Napi::Number::New(env, labelList[i].chain_flag));
+
+    jsArray.Set(i, obj);
+  }
+
+  return jsArray;
 }
 
 template <class T>
@@ -80,23 +113,21 @@ std::shared_ptr<char> createReferenceSharedPtr(Napi::Env env, Napi::ArrayBuffer 
       env,
       "Release ArrayBuffer",
       1, 1, nullptr);
-  return std::shared_ptr<char>(data, [tsfn, buf_ref](char *) mutable {
+  return std::shared_ptr<char>(data, [tsfn, buf_ref](char *) mutable
+                               {
     tsfn.NonBlockingCall(buf_ref);
-    tsfn.Release();
-  });
+    tsfn.Release(); });
 }
 
-void taskFunc(
-    ResultTSFN tsfn,
-    ReleaseTSFN<Napi::ArrayBuffer> releaseBuffer,
-    Napi::Reference<Napi::ArrayBuffer> *buffer_ref,
+void init(
+    Open_JTalk &open_jtalk,
+    ResultTSFN &tsfn,
     void *voice_data,
     size_t length_of_voice_data,
-    const std::string &text,
     const Options &options,
-    const MeCab::ViterbiOptions &viterbi_options)
+    const MeCab::ViterbiOptions &viterbi_options,
+    bool use_hts = true)
 {
-  Open_JTalk open_jtalk;
 
   Open_JTalk_initialize(&open_jtalk);
 
@@ -104,9 +135,9 @@ void taskFunc(
       &open_jtalk,
       voice_data,
       length_of_voice_data,
-      viterbi_options);
-  releaseBuffer.NonBlockingCall(buffer_ref);
-  releaseBuffer.Release();
+      viterbi_options,
+      use_hts);
+
   if (code)
   {
     switch (code)
@@ -125,6 +156,23 @@ void taskFunc(
     return;
   }
   SetOptions(&open_jtalk, options);
+}
+
+void taskFunc(
+    ResultTSFN tsfn,
+    ReleaseTSFN<Napi::ArrayBuffer> releaseBuffer,
+    Napi::Reference<Napi::ArrayBuffer> *buffer_ref,
+    void *voice_data,
+    size_t length_of_voice_data,
+    const std::string &text,
+    const Options &options,
+    const MeCab::ViterbiOptions &viterbi_options)
+{
+  Open_JTalk open_jtalk;
+
+  releaseBuffer.NonBlockingCall(buffer_ref);
+  releaseBuffer.Release();
+  init(open_jtalk, tsfn, voice_data, length_of_voice_data, options, viterbi_options);
 
   signed short *pcm;
   size_t length_of_pcm;
@@ -139,6 +187,26 @@ void taskFunc(
   tsfn.NonBlockingCall(new DataType(Wave{
       length_of_pcm, pcm, open_jtalk.engine.condition.sampling_frequency}));
   tsfn.Release();
+  Open_JTalk_clear(&open_jtalk);
+}
+
+void taskFunc2(
+    ResultTSFN tsfn,
+    void *voice_data,
+    size_t length_of_voice_data,
+    const std::string &text,
+    const Options &options,
+    const MeCab::ViterbiOptions &viterbi_options)
+{
+  Open_JTalk open_jtalk;
+
+  init(open_jtalk, tsfn, voice_data, length_of_voice_data, options, viterbi_options, false);
+
+  std::vector<labels> features = Open_JTalk_run_frontend(&open_jtalk, text.c_str());
+
+  tsfn.NonBlockingCall(new DataType(features));
+  tsfn.Release();
+
   Open_JTalk_clear(&open_jtalk);
 }
 
@@ -228,6 +296,7 @@ void LoadArguments(
 }
 
 ThreadPool pool(std::thread::hardware_concurrency());
+
 Napi::Value Synthesis(const Napi::CallbackInfo &info)
 {
   Napi::Env env = info.Env();
@@ -250,7 +319,8 @@ Napi::Value Synthesis(const Napi::CallbackInfo &info)
       1,
       context,
       [](Napi::Env, FinalizerDataType *,
-         Context *ctx) {
+         Context *ctx)
+      {
         delete ctx;
       });
   auto rtsfn = ReleaseTSFN<Napi::ArrayBuffer>::New(
@@ -261,9 +331,39 @@ Napi::Value Synthesis(const Napi::CallbackInfo &info)
   return env.Undefined();
 }
 
+Napi::Value text_to_accent_phrases(const Napi::CallbackInfo &info)
+{
+  Napi::Env env = info.Env();
+
+  std::string text;
+  Napi::ArrayBuffer voice_array_buff;
+  Options options;
+  MeCab::ViterbiOptions viterbi_options;
+
+  LoadArguments(info, text, voice_array_buff, options, viterbi_options);
+  void *voice_data = voice_array_buff.Data();
+  size_t length_of_voice_data = voice_array_buff.ByteLength();
+  Context *context = new Context(Napi::Persistent(info.This()));
+  ResultTSFN tsfn = ResultTSFN::New(
+      env,
+      info[0].As<Napi::Function>(),
+      "text_to_accent_phrases Callback",
+      1,
+      1,
+      context,
+      [](Napi::Env, FinalizerDataType *,
+         Context *ctx)
+      {
+        delete ctx;
+      });
+  pool.AddTask(taskFunc2, tsfn, voice_data, length_of_voice_data, std::move(text), std::move(options), std::move(viterbi_options));
+  return env.Undefined();
+}
+
 Napi::Object Init(Napi::Env env, Napi::Object exports)
 {
   exports.Set("synthesis", Napi::Function::New(env, Synthesis));
+  exports.Set("text_to_accent_phrases", Napi::Function::New(env, text_to_accent_phrases));
   return exports;
 }
 

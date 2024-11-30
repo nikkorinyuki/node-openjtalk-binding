@@ -5,7 +5,7 @@
 const binary = require("@tignear/node-pre-gyp");
 const path = require('path');
 const meta = binary.meta(path.resolve(path.join(__dirname, './package.json')));
-const { synthesis: _synthesis } = require(meta.module);
+const { synthesis: _synthesis, text_to_accent_phrases : _text_to_accent_phrases } = require(meta.module);
 const { promises: fs } = require("fs");
 const path_to_dictionary = path.resolve(path.join(meta.module_path, 'dictionary'));
 
@@ -116,6 +116,49 @@ exports.synthesis = async function synthesis(text, options) {
     }
     try {
       _synthesis(cb, text, { ...options, htsvoice, dictionary });
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+/** 
+ * Make accent phrases from text
+ * @async
+ * @function
+ * @static
+ * @param {string} text Text.
+ * @param {OpenJTalkOptions} options OpenJTalk synthesize option.
+ * @return {Promise<WaveObject>} Synthesized PCM.
+ */
+exports.text_to_accent_phrases = async function text_to_accent_phrases(text, options) {
+  let htsvoice = options.htsvoice;
+  if (typeof htsvoice === "string") {
+    htsvoice = await fs.readFile(htsvoice);
+  }
+  if (htsvoice instanceof Uint8Array) {
+    htsvoice = htsvoice.buffer;
+  }
+  let dictionary = options.dictionary;
+  if (!dictionary) {
+    dictionary = await default_dictionary;
+  } else if (typeof dictionary == "string") {
+    dictionary = await readDictionary(dictionary);
+  } else {
+    dictionary = Object.fromEntries(Object.entries(dictionary).map(([k, v]) => [k, v instanceof Uint8Array ? v.buffer : v]));
+  }
+  return new Promise((resolve, reject) => {
+    if (!text) reject(new TypeError("The first argument must be a non-empty string"));
+    function cb(err, /** @type {NjdFeatures[]} */ njd_features) {
+      if (err) {
+        reject(err);
+        return;
+      }
+
+      resolve(njd_features);
+    }
+    try {
+      _text_to_accent_phrases(cb, text, { ...options, htsvoice, dictionary });
     } catch (err) {
       reject(err);
     }
