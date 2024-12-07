@@ -38,9 +38,9 @@ typedef struct labels
    int chain_flag;
 } labels;
 
-void Open_JTalk_initialize(Open_JTalk *open_jtalk, bool use_hts = true);
-void Open_JTalk_clear(Open_JTalk *open_jtalk, bool use_hts = true);
-int Open_JTalk_load(Open_JTalk *open_jtalk, void *voice_data, size_t length_of_voice_data, const MeCab::ViterbiOptions &viterbi_options, bool use_hts = true);
+void Open_JTalk_initialize(Open_JTalk *open_jtalk);
+void Open_JTalk_clear(Open_JTalk *open_jtalk);
+int Open_JTalk_load(Open_JTalk *open_jtalk, void *voice_data, size_t length_of_voice_data, const MeCab::ViterbiOptions &viterbi_options);
 void Open_JTalk_set_sampling_frequency(Open_JTalk *open_jtalk, size_t i);
 void Open_JTalk_set_fperiod(Open_JTalk *open_jtalk, size_t i);
 void Open_JTalk_set_alpha(Open_JTalk *open_jtalk, double f);
@@ -66,8 +66,10 @@ int njd_node_get_mora_size(NJDNode *node);
 std::string njd_node_get_chain_rule(NJDNode *node);
 int njd_node_get_chain_flag(NJDNode *node);
 
-std::vector<labels> Open_JTalk_run_frontend(Open_JTalk *open_jtalk, const char *txt);
+int Open_JTalk_run_frontend(Open_JTalk *open_jtalk, const char *txt, std::vector<std::string> *features);
 labels node2feature(NJDNode *node);
 std::vector<labels> njd2feature(NJD *njd);
+std::vector<std::string> make_label(Open_JTalk *open_jtalk);
+void feature2njd(NJD *njd, std::vector<labels> features);
 
 int Open_JTalk_synthesis(Open_JTalk *open_jtalk, const char *txt, signed short **pcm, size_t *length_of_pcm);

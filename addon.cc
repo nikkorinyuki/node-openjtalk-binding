@@ -5,6 +5,7 @@
 #include <string>
 #include "options.cc"
 #include "thread_pool/ThreadPool.h"
+#include <iostream>
 
 /**compatibility of c++14**/
 #if __cplusplus >= 201703L
@@ -30,42 +31,7 @@ struct Wave
   size_t sampling_frequency;
 };
 
-using DataType = variant<Wave, std::vector<labels>, const char *>;
-void CallJs(Napi::Env env, Napi::Function callback, Context *context,
-            DataType *data)
-{
-  if (env != nullptr)
-  {
-    if (callback != nullptr)
-    {
-      if (holds_alternative<Wave>(*data))
-      {
-        auto wave = get<Wave>(*data);
-        auto buffer = Napi::Buffer<signed short>::New(
-            env, wave.value, wave.length, [](Napi::Env, signed short *pcm)
-            { free(pcm); });
-        callback.Call(context->Value(), {env.Null(), buffer, Napi::Number::New(env, wave.sampling_frequency)});
-      }
-      else if (holds_alternative<std::vector<labels>>(*data))
-      {
-        auto features = get<std::vector<labels>>(*data);
-        callback.Call(context->Value(), {env.Null(), ConvertLabelsToJSArray(env, features)});
-      }
-      else
-      {
-        auto msg = get<const char *>(*data);
-        callback.Call(context->Value(), {Napi::Error::New(env, msg).Value()});
-      }
-    }
-  }
-  if (data != nullptr)
-  {
-    // We're finished with the data.
-    delete data;
-  }
-}
-
-// std::vector<labels> を Napi::Array に変換する関数
+// std::vector<std::string> を Napi::Array に変換する関数
 Napi::Array ConvertLabelsToJSArray(Napi::Env env, const std::vector<labels> &labelList)
 {
   Napi::Array jsArray = Napi::Array::New(env, labelList.size());
@@ -92,6 +58,51 @@ Napi::Array ConvertLabelsToJSArray(Napi::Env env, const std::vector<labels> &lab
   }
 
   return jsArray;
+}
+
+Napi::Array ConvertVectorToNapiArray(const Napi::Env &env, const std::vector<std::string> &vector)
+{
+  Napi::Array array = Napi::Array::New(env, vector.size());
+  for (size_t i = 0; i < vector.size(); i++)
+  {
+    array.Set(i, Napi::String::New(env, vector[i]));
+  }
+  return array;
+}
+
+using DataType = variant<Wave, std::vector<std::string>, const char *>;
+void CallJs(Napi::Env env, Napi::Function callback, Context *context,
+            DataType *data)
+{
+  if (env != nullptr)
+  {
+    if (callback != nullptr)
+    {
+      if (holds_alternative<Wave>(*data))
+      {
+        auto wave = get<Wave>(*data);
+        auto buffer = Napi::Buffer<signed short>::New(
+            env, wave.value, wave.length, [](Napi::Env, signed short *pcm)
+            { free(pcm); });
+        callback.Call(context->Value(), {env.Null(), buffer, Napi::Number::New(env, wave.sampling_frequency)});
+      }
+      else if (holds_alternative<std::vector<std::string>>(*data))
+      {
+        auto features = get<std::vector<std::string>>(*data);
+        callback.Call(context->Value(), {env.Null(), ConvertVectorToNapiArray(env, features)});
+      }
+      else
+      {
+        auto msg = get<const char *>(*data);
+        callback.Call(context->Value(), {Napi::Error::New(env, msg).Value()});
+      }
+    }
+  }
+  if (data != nullptr)
+  {
+    // We're finished with the data.
+    delete data;
+  }
 }
 
 template <class T>
@@ -125,8 +136,7 @@ void init(
     void *voice_data,
     size_t length_of_voice_data,
     const Options &options,
-    const MeCab::ViterbiOptions &viterbi_options,
-    bool use_hts = true)
+    const MeCab::ViterbiOptions &viterbi_options)
 {
 
   Open_JTalk_initialize(&open_jtalk);
@@ -135,8 +145,7 @@ void init(
       &open_jtalk,
       voice_data,
       length_of_voice_data,
-      viterbi_options,
-      use_hts);
+      viterbi_options);
 
   if (code)
   {
@@ -200,9 +209,10 @@ void taskFunc2(
 {
   Open_JTalk open_jtalk;
 
-  init(open_jtalk, tsfn, voice_data, length_of_voice_data, options, viterbi_options, false);
+  init(open_jtalk, tsfn, voice_data, length_of_voice_data, options, viterbi_options);
 
-  std::vector<labels> features = Open_JTalk_run_frontend(&open_jtalk, text.c_str());
+  std::vector<std::string> features = {};
+  Open_JTalk_run_frontend(&open_jtalk, text.c_str(), &features);
 
   tsfn.NonBlockingCall(new DataType(features));
   tsfn.Release();

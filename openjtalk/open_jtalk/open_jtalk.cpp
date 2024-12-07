@@ -9,41 +9,40 @@
 #include "njd_set_unvoiced_vowel.h"
 #include "njd_set_long_vowel.h"
 #include "njd2jpcommon.h"
+#include <iostream>
 #define MAXBUFLEN 1024
 
-void Open_JTalk_initialize(Open_JTalk *open_jtalk, bool use_hts = true)
+void Open_JTalk_initialize(Open_JTalk *open_jtalk)
 {
   MeCab::Mecab_initialize(&open_jtalk->mecab);
   NJD_initialize(&open_jtalk->njd);
   JPCommon_initialize(&open_jtalk->jpcommon);
-  if (use_hts)
-    HTS_Engine_initialize(&open_jtalk->engine);
+  HTS_Engine_initialize(&open_jtalk->engine);
 }
 
-void Open_JTalk_clear(Open_JTalk *open_jtalk, bool use_hts = true)
+void Open_JTalk_clear(Open_JTalk *open_jtalk)
 {
   MeCab::Mecab_clear(&open_jtalk->mecab);
   NJD_clear(&open_jtalk->njd);
   JPCommon_clear(&open_jtalk->jpcommon);
-  if (use_hts)
-    HTS_Engine_clear(&open_jtalk->engine);
+  HTS_Engine_clear(&open_jtalk->engine);
 }
 
-int Open_JTalk_load(Open_JTalk *open_jtalk, void *voice_data, size_t length_of_voice_data, const MeCab::ViterbiOptions &viterbi_options, bool use_hts = true)
+int Open_JTalk_load(Open_JTalk *open_jtalk, void *voice_data, size_t length_of_voice_data, const MeCab::ViterbiOptions &viterbi_options)
 {
   if (MeCab::Mecab_load(&open_jtalk->mecab, viterbi_options) != TRUE)
   {
-    Open_JTalk_clear(open_jtalk, use_hts);
+    Open_JTalk_clear(open_jtalk);
     return 1;
   }
-  if (use_hts && HTS_Engine_load(&open_jtalk->engine, &voice_data, &length_of_voice_data, 1) != TRUE)
+  if (HTS_Engine_load(&open_jtalk->engine, &voice_data, &length_of_voice_data, 1) != TRUE)
   {
-    Open_JTalk_clear(open_jtalk, use_hts);
+    Open_JTalk_clear(open_jtalk);
     return 2;
   }
   if (strcmp(HTS_Engine_get_fullcontext_label_format(&open_jtalk->engine), "HTS_TTS_JPN") != 0)
   {
-    Open_JTalk_clear(open_jtalk, use_hts);
+    Open_JTalk_clear(open_jtalk);
     return 3;
   }
   return 0;
@@ -169,7 +168,7 @@ int njd_node_get_chain_flag(NJDNode *node)
   return NJDNode_get_chain_flag(node);
 }
 
-std::vector<labels> Open_JTalk_run_frontend(Open_JTalk *open_jtalk, const char *txt)
+int Open_JTalk_run_frontend(Open_JTalk *open_jtalk, const char *txt, std::vector<std::string> *features)
 {
   char *buff = (char *)malloc(strlen(txt) * 4 + 1);
 
@@ -184,13 +183,24 @@ std::vector<labels> Open_JTalk_run_frontend(Open_JTalk *open_jtalk, const char *
   njd_set_unvoiced_vowel(&open_jtalk->njd);
   njd_set_long_vowel(&open_jtalk->njd);
 
-  std::vector<labels> features = njd2feature(&open_jtalk->njd);
+  /*njd2jpcommon(&open_jtalk->jpcommon, &open_jtalk->njd);
+  JPCommon_make_label(&open_jtalk->jpcommon);*/
+
+  /*std::vector<labels> _features = njd2feature(&open_jtalk->njd);
+  feature2njd(&open_jtalk->njd, _features);*/
+  njd2jpcommon(&open_jtalk->jpcommon, &open_jtalk->njd);
+  JPCommon_make_label(&open_jtalk->jpcommon);
+
+  *features = make_label(open_jtalk);
+
+  HTS_Engine_refresh(&open_jtalk->engine);
+  JPCommon_refresh(&open_jtalk->jpcommon);
 
   NJD_refresh(&open_jtalk->njd);
   MeCab::Mecab_refresh(&open_jtalk->mecab);
   free(buff);
 
-  return features;
+  return 1;
 }
 
 labels node2feature(NJDNode *node)
@@ -215,13 +225,57 @@ labels node2feature(NJDNode *node)
 std::vector<labels> njd2feature(NJD *njd)
 {
   NJDNode *node = njd->head;
-  std::vector<labels> features;
+  std::vector<labels> features = {};
   while (node != NULL)
   {
     features.push_back(node2feature(node));
     node = node->next;
   }
   return features;
+}
+
+std::vector<std::string> make_label(Open_JTalk *open_jtalk)
+{
+  int label_size = JPCommon_get_label_size(&open_jtalk->jpcommon);
+  char **label_feature = JPCommon_get_label_feature(&open_jtalk->jpcommon);
+
+  std::vector<std::string> labels = {};
+  for (size_t i = 0; i < label_size; i++)
+  {
+    labels.push_back(label_feature[i]);
+  }
+
+  /*JPCommon_refresh(&open_jtalk->jpcommon);
+  NJD_refresh(&open_jtalk->njd);*/
+  return labels;
+}
+
+void feature2njd(NJD *njd, std::vector<labels> features)
+{
+  NJDNode *node;
+
+  for (size_t i = 0; i < features.size(); i++)
+  {
+    labels feature_node = features[i];
+
+    node = new NJDNode();
+    NJDNode_initialize(node);
+    NJDNode_set_string(node, feature_node.string.c_str());
+    NJDNode_set_pos(node, feature_node.pos.c_str());
+    NJDNode_set_pos_group1(node, feature_node.pos_group1.c_str());
+    NJDNode_set_pos_group2(node, feature_node.pos_group2.c_str());
+    NJDNode_set_pos_group3(node, feature_node.pos_group3.c_str());
+    NJDNode_set_ctype(node, feature_node.ctype.c_str());
+    NJDNode_set_cform(node, feature_node.cform.c_str());
+    NJDNode_set_orig(node, feature_node.orig.c_str());
+    NJDNode_set_read(node, feature_node.read.c_str());
+    NJDNode_set_pron(node, feature_node.pron.c_str());
+    NJDNode_set_acc(node, feature_node.acc);
+    NJDNode_set_mora_size(node, feature_node.mora_size);
+    NJDNode_set_chain_rule(node, feature_node.chain_rule.c_str());
+    NJDNode_set_chain_flag(node, feature_node.chain_flag);
+    NJD_push_node(njd, node);
+  }
 }
 
 int Open_JTalk_synthesis(Open_JTalk *open_jtalk, const char *txt, signed short **pcm, size_t *length_of_pcm)
