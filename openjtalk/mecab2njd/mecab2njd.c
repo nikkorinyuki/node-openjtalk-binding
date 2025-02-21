@@ -65,6 +65,7 @@ void mecab2njd(NJD * njd, char **feature, int size)
    for (i = 0; i < size; i++) {
       node = (NJDNode *) calloc(1, sizeof(NJDNode));
       NJDNode_initialize(node);
+      printf("%s\n",feature[i]);
       NJDNode_load(node, feature[i]);
       NJD_push_node(njd, node);
    }

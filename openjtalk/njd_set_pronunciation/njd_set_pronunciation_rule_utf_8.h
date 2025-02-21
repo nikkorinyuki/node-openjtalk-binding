@@ -429,6 +429,7 @@ static const char *njd_set_pronunciation_list[] = {
 
 static const char *njd_set_pronunciation_symbol_list[] = {
    "？", "？",
+   "", "",
    NULL, NULL
 };
 

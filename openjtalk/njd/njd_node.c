@@ -423,32 +423,32 @@ void NJDNode_load(NJDNode * node, const char *str)
    int index_acc;
    NJDNode *prev = NULL;
    /* load */
-   get_token_from_string(str, &index, buff_string, ',');
-   get_token_from_string(str, &index, buff, ',');
+   get_token_from_string(str, &index, buff_string, ','); //表層形
+   get_token_from_string(str, &index, buff, ','); //品詞
    NJDNode_set_pos(node, buff);
-   get_token_from_string(str, &index, buff, ',');
+   get_token_from_string(str, &index, buff, ','); //品詞細分類１
    NJDNode_set_pos_group1(node, buff);
-   get_token_from_string(str, &index, buff, ',');
+   get_token_from_string(str, &index, buff, ','); //品詞細分類２
    NJDNode_set_pos_group2(node, buff);
-   get_token_from_string(str, &index, buff, ',');
+   get_token_from_string(str, &index, buff, ','); //品詞細分類３
    NJDNode_set_pos_group3(node, buff);
-   get_token_from_string(str, &index, buff, ',');
+   get_token_from_string(str, &index, buff, ','); //活用型
    NJDNode_set_ctype(node, buff);
-   get_token_from_string(str, &index, buff, ',');
+   get_token_from_string(str, &index, buff, ','); //活用形
    NJDNode_set_cform(node, buff);
-   get_token_from_string(str, &index, buff_orig, ',');
-   get_token_from_string(str, &index, buff_read, ',');
-   get_token_from_string(str, &index, buff_pron, ',');
-   get_token_from_string(str, &index, buff_acc, ',');
-   get_token_from_string(str, &index, buff, ',');
+   get_token_from_string(str, &index, buff_orig, ','); //原形
+   get_token_from_string(str, &index, buff_read, ','); //読み
+   get_token_from_string(str, &index, buff_pron, ','); //発音
+   get_token_from_string(str, &index, buff_acc, ','); //アクセント
+   get_token_from_string(str, &index, buff, ','); //アクセント位置
    NJDNode_set_chain_rule(node, buff);
-   get_token_from_string(str, &index, buff, ',');
+   get_token_from_string(str, &index, buff, ','); //chain_flag
    if (strcmp(buff, "1") == 0)
       NJDNode_set_chain_flag(node, 1);
    else if (strcmp(buff, "0") == 0)
       NJDNode_set_chain_flag(node, 0);
 
-   /* for symbol */
+   /* for symbol アクセントデータ不足 */
    if (strstr(buff_acc, "*") != NULL || strstr(buff_acc, "/") == NULL) {
       NJDNode_set_string(node, buff_string);
       NJDNode_set_orig(node, buff_orig);
@@ -459,12 +459,12 @@ void NJDNode_load(NJDNode * node, const char *str)
       return;
    }
 
-   /* count chained word */
+   /* count chained word アクセント数カウント */
    for (i = 0, count = 0; buff_acc[i] != '\0'; i++)
       if (buff_acc[i] == '/')
          count++;
 
-   /* for single word */
+   /* for single word アクセントが一つの単語 */
    if (count == 1) {
       NJDNode_set_string(node, buff_string);
       NJDNode_set_orig(node, buff_orig);
@@ -472,7 +472,7 @@ void NJDNode_load(NJDNode * node, const char *str)
       NJDNode_set_pron(node, buff_pron);
       index_acc = 0;
       get_token_from_string(buff_acc, &index_acc, buff, '/');
-      if (buff[0] == '\0') {
+      if (buff[0] == '\0') { // アクセントなし
          j = 0;
       } else {
          j = atoi(buff);
@@ -503,7 +503,7 @@ void NJDNode_load(NJDNode * node, const char *str)
          node->prev = prev;
          prev->next = node;
       }
-      /* orig */
+      /* orig 原形 */
       get_token_from_string(buff_orig, &index_orig, buff, ':');
       NJDNode_set_orig(node, buff);
       /* string */
@@ -513,13 +513,13 @@ void NJDNode_load(NJDNode * node, const char *str)
       } else {
          NJDNode_set_string(node, &buff_string[index_string]);
       }
-      /* read */
+      /* read 読み */
       get_token_from_string(buff_read, &index_read, buff, ':');
       NJDNode_set_read(node, buff);
-      /* pron */
+      /* pron 発音 */
       get_token_from_string(buff_pron, &index_pron, buff, ':');
       NJDNode_set_pron(node, buff);
-      /* acc */
+      /* acc アクセント */
       get_token_from_string(buff_acc, &index_acc, buff, '/');
       if (buff[0] == '\0') {
          j = 0;

@@ -12,12 +12,14 @@
                         'char.def',
                         'left-id.def',
                         'matrix.def',
-                        'naist-jdic.csv',
+                        '1naist-jdic.csv',
                         'pos-id.def',
                         'rewrite.def',
                         'right-id.def',
-                        'unidic-csj.csv',
-                        'unk.def'
+                        '2unidic-csj.csv',
+                        'unk.def',
+                        '3mecab-ipadic-neologd.csv',
+                        '4bep-eng.csv',
                     ],
                     'outputs': [
                         'char.bin',

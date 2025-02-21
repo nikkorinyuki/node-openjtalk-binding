@@ -92,7 +92,7 @@ void njd_set_pronunciation(NJD *njd)
       {
          NJDNode_set_read(node, NULL);
          NJDNode_set_pron(node, NULL);
-         /* if the word is kana, set them as filler */
+         /* if the word is kana, set them as filler ひらがなだけの時フィラーに設定 */
          {
             str = NJDNode_get_string(node);
             len = strlen(str);
@@ -116,7 +116,7 @@ void njd_set_pronunciation(NJD *njd)
                   pos++;
                }
             }
-            /* if filler, overwrite pos */
+            /* if filler, overwrite pos フィラーの場合、posを上書きする */
             if (NJDNode_get_mora_size(node) != 0)
             {
                NJDNode_set_pos(node, NJD_SET_PRONUNCIATION_FILLER);
@@ -142,7 +142,7 @@ void njd_set_pronunciation(NJD *njd)
                }
             }
          }
-         /* if the word is not kana, set pause symbol */
+         /* if the word is not kana, set pause symbol　品詞*は全部、に変換！！ */
          if (strcmp(NJDNode_get_pron(node), "*") == 0)
          {
             NJDNode_set_read(node, NJD_SET_PRONUNCIATION_TOUTEN);
@@ -151,7 +151,7 @@ void njd_set_pronunciation(NJD *njd)
          }
       }
    }
-   NJD_remove_silent_node(njd);
+   NJD_remove_silent_node(njd);// 発音しないnode削除
 
    /* chain kana sequence */
    {

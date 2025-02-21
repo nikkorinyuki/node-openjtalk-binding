@@ -1,4 +1,6 @@
 node_modules
+*.csv
+*.raw_csv
 *.log
 /build
 Makefile

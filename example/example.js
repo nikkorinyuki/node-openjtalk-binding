@@ -1,15 +1,17 @@
-const { synthesis } = require("../addon");
+const { text_to_accent_phrases } = require("../prebuild/node-v131-napi-v5-linux-x64-glibc-2.39/addon");
 const path = require("path");
 const { promises: fs, readFileSync } = require("fs");
 const path_to_htsvoice = path.resolve(__dirname, "../", "hts_voice_nitech_jp_atr503_m001-1.05", "nitech_jp_atr503_m001.htsvoice");
-const htsvoice = readFileSync(path_to_htsvoice);
-synthesis("竹やぶ焼けた。", {
-  htsvoice,
-}).then(wave => {
-  const wav = Buffer.alloc(wave.data.byteLength + 44);
-  createWAV(new DataView(wav.buffer), wave);
-  return fs.writeFile(path.resolve(__dirname, "example.wav"), wav);
-});
+const htsvoice = readFileSync(path_to_htsvoice).buffer;
+
+(async () => {
+
+  text_to_accent_phrases((err, njd_features) => { console.log("結果:" + JSON.stringify(njd_features)); }, "呪術廻戦竹やぶwhereはWHEREで焼×けたいやaardvarkやUnity。", {
+    htsvoice,
+    dictionary: await readDictionary(path.resolve(__dirname, "../", "prebuild", "node-v131-napi-v5-linux-x64-glibc-2.39", "dictionary"))
+  });
+})();
+
 
 /**
  * 
@@ -36,4 +38,21 @@ function createWAV(view, wave) {
     view.setInt16(i, x, true);
     i += 2;
   }
+}
+
+async function readDictionary(path_to_dictionary) {
+  const [unkdic, sysdic, property, matrix] = (await Promise.all(
+    [
+      readFileSync(path.resolve(path_to_dictionary, "unk.dic")),
+      readFileSync(path.resolve(path_to_dictionary, "sys.dic")),
+      readFileSync(path.resolve(path_to_dictionary, "char.bin")),
+      readFileSync(path.resolve(path_to_dictionary, "matrix.bin"))
+    ]
+  )).map(e => e.buffer);
+  return {
+    unkdic,
+    sysdic,
+    property,
+    matrix
+  };
 }
